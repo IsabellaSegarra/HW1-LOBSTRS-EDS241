@@ -77,6 +77,8 @@ Let’s break it down step by step and see what the data reveals! 📊
 
 **a.** Do the control sites (Arroyo Quemado, Carpenteria, and Mohawk) provide a strong counterfactual for our treatment sites (Naples, Isla Vista)? Write a paragraph making a case for why this comparison is ceteris paribus or whether selection bias is likely (be specific!).  
 
+Finding a perfect counterfactual is a difficult task to do. In this study, there are three control sites and two treatment sites. The size and lobster populations of all the sites is a feature that is difficult to control for. Although there is a control and treatment group assigned randomly, ommitted variable bias still appears within this sample design, therefore selection bias is likely because the control and treatment could be more similar. 
+
 ------------------------------------------------------------------------
 
 #### Step 2: Read & wrangle data
@@ -88,7 +90,8 @@ Let’s break it down step by step and see what the data reveals! 📊
 ```{r}
 # HINT: check for coding of missing values (`na = "-99999"`)
 
-rawdata <- 
+rawdata <- read_csv(here("data", "spiny_abundance_sb_18.csv")) %>% 
+    janitor::clean_names()
 
 ```
 
@@ -98,7 +101,14 @@ rawdata <-
 
 ```{r}
 
-tidydata <- 
+tidydata <- rawdata %>% 
+    # Create new column reef as a factor
+  mutate(reef = factor(site, 
+                       # Specify site levels in order of new labels 
+                       levels = c("AQUE", "CARP", "MOHK", "IVEE", "NAPL"), 
+                       # Specify new levels 
+                       labels = c("Arroyo Quemado", "Carpenteria", "Mohawk", "Isla Vista", "Naples")))
+
     
 ```
 
@@ -117,7 +127,27 @@ Create new `df` named `spiny_counts`
 
 #HINT(e): Use `case_when()` to create the 3 new variable columns
 
-spiny_counts <- 
+    # ......Step d...... 
+spiny_counts <- tidydata %>% 
+    # Group by site, year, and transect
+    group_by(site, year, transect) %>% 
+    # Count the number of rows in each group
+    mutate(counts = n()) %>% 
+    # Create new column
+    mutate(mean_size = mean(size_mm, na.rm = TRUE)) %>% 
+    # ungroup 
+    ungroup() %>% 
+# ...... Step e.....
+    mutate(mpa = sample(rep(c("MPA", "non_MPA"))) %>% 
+    mutate(treat = case_when(
+       mpa == "MPA" ~ 1, 
+       mpa == "non_MPA" ~ 0
+    ))
+
+#.... Verify work....
+if (class(spiny_counts$counts) == "numeric"){
+    
+}
 
 ```
 
