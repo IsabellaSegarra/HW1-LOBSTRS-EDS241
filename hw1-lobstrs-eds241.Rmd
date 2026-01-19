@@ -90,8 +90,9 @@ Finding a perfect counterfactual is a difficult task to do. In this study, there
 ```{r}
 # HINT: check for coding of missing values (`na = "-99999"`)
 
-rawdata <- read_csv(here("data", "spiny_abundance_sb_18.csv")) %>% 
-    janitor::clean_names()
+rawdata <- read_csv(here("data", "spiny_abundance_sb_18.csv"), 
+                    na = "-99999") %>% # Handle missing values as NAs
+    janitor::clean_names() 
 
 ```
 
@@ -138,16 +139,18 @@ spiny_counts <- tidydata %>%
     # ungroup 
     ungroup() %>% 
 # ...... Step e.....
-    mutate(mpa = sample(rep(c("MPA", "non_MPA"))) %>% 
+    # Create new mpa column specifying which sites are MPA and non_MPA
+    mutate(mpa = case_when(
+        site == 'IVEE' ~ 'MPA',
+        site == 'NAPL' ~ 'MPA', 
+        site == 'AQUE' ~ 'non_MPA',
+        site == 'CARP' ~ 'non_MPA', 
+        site == 'MOHK' ~ 'non_MPA')) %>% 
+    # Create new treat column with 1 for MPA and 0 for non MPA
     mutate(treat = case_when(
        mpa == "MPA" ~ 1, 
        mpa == "non_MPA" ~ 0
     ))
-
-#.... Verify work....
-if (class(spiny_counts$counts) == "numeric"){
-    
-}
 
 ```
 
@@ -178,18 +181,109 @@ Create a plot of lobster **size** :
 
 4) You choose the grouping variable(s)!
 
-```{r}
+```{r, fig.cap= "Fig 1. Distribution of Lobster Counts by Site."}
 # plot 1: ....
+spiny_counts %>%
+    # Plot the counts
+  ggplot(aes(x = counts)) +
+  geom_histogram(aes(y = ..density..),
+                 colour = "black", fill = "white") +
+  geom_density(lwd = 0.8, linetype = 1, colour = "#EA7769") +
+  # Seperate by site 
+    facet_wrap(~site) +
+  labs(title = "Distribution of Lobster Counts by Site", x = "Lobster Count", y = "Density") +
+    theme(plot.title = element_text(hjust = 0.5)) +
+  theme_bw()
 
-spiny_counts %>% 
-ggplot()
-    
+```
+
+```{r}
+# Plot 2:
+spiny_counts %>%
+  ggplot(aes(x = mpa, y = counts, fill = mpa)) +
+  geom_violin(alpha = 0.8) +
+  labs(title = "Lobster Counts by MPA Status", x = "MPA Status", y = "Lobster Count")+
+  theme_minimal() +
+scale_fill_manual(values = c("#ADD8E6", "#8B3A3A")) +
+  theme(plot.title = element_text(hjust = 0.5),legend.position = "none")
+
+```
+
+```{r}
+# plot 3: 
+
+tidydata %>%
+  ggplot(aes(x = factor(year), y = count)) +
+  geom_boxplot(fill = "#EA7769", outlier.shape = NA) +
+  geom_jitter(width = 0.1, alpha = 0.1) +
+    ylim(0,15) +
+  labs(x = "Year", y = "Lobster counts", title = "Lobster Count Distribution by Year") +
+    theme(plot.title = element_text(hjust = 0.5)) +
+  theme_bw() 
+
+tidydata %>% 
+    ggplot(aes(x = count, y = factor(year))) +
+ ggridges::geom_density_ridges(rel_min_height = 0.001, scale = 3) +
+  labs(x = "Year", y = "Lobster counts", title = "Lobster Count Distribution by Year") +
+  theme_bw() +
+    xlim(0,20) +
+    theme(plot.title = element_text(hjust = 0.5))
+
+
+```
+
+```{r}
+# plot 4: 
 ```
 
 **c.** Compare means of the outcome by treatment group. Using the `tbl_summary()` function from the package [`gt_summary`](https://www.danieldsjoberg.com/gtsummary/articles/tbl_summary.html) 
 
 ```{r}
 # USE: gt_summary::tbl_summary()
+
+# ....Treatment summary.... 
+treatment_sum <- spiny_counts %>%  
+    # Group by mpa
+    tbl_summary(by = mpa,
+                # Include mean of outcome (count, size)
+                include = c(count, size_mm),
+                # Stat = mean 
+                statistic = list(all_continuous()~ "{mean}"), 
+                # Remove unknowns 
+                missing = "no", 
+                label = list(
+      count   ~ "Lobster count",
+      size_mm ~ "Carapace length (mm)"
+    )) %>% 
+    bold_labels()
+
+treatment_sum
+
+#.... Make pretty with {gt}....
+
+treatment_sum %>% 
+  as_gt() %>% 
+  
+  tab_header(
+    title = "Lobster Population Metrics Across MPA Status",
+    subtitle = "Marine Protected Areas Lobster Count and Size"
+  ) %>% 
+  
+  tab_spanner(
+    label = "MPA Status", 
+    columns = c(stat_1, stat_2)
+  ) %>% 
+  
+  cols_label(
+    label = "Variable",
+    stat_1 = "MPA", 
+    stat_2 = "Non-MPA"
+  ) %>% 
+  
+  tab_source_note(
+    source_note = "Note: Reed et al., 2019"
+  )
+
 ```
 
 ------------------------------------------------------------------------
@@ -203,11 +297,19 @@ ggplot()
 ```{r}
 # NOTE: We will not evaluate/interpret model fit in this assignment (e.g., R-square)
 
-m1_ols <- 
+m1_ols <- lm(counts ~ treat, data = spiny_counts)
 
 summ(m1_ols, model.fit = FALSE) 
 
+#....Extract Coefficients....
+intercept_m1_ols <- m1_ols$coefficients[1]
+treat_m1_ols <- m1_ols$coefficients[2]
+
+#....PUT IN TABLE
+
 ```
+Interpretation:
+The average lobster count for non-MPA sites is 28.17. For treated or MPA sites, lobster count is on average 15.20 more lobsters than non-MPA sites.   
 
 **c.** Check the model assumptions using the `check_model` function from the `performance` package
 
@@ -216,21 +318,22 @@ summ(m1_ols, model.fit = FALSE)
 ```{r}
 check_model(m1_ols,  check = "qq" )
 ```
-
+This QQ plot demonstrates the normality of the residuals of the model. Since the points do not follow the green line, this signifies non-normality. If the data followed a normal pattern, the data points would follow the diagonal line. This plot shows that the data is skewed, which could be because lobster counts 
 
 ```{r}
 check_model(m1_ols, check = "normality")
 ```
-
+This graph of the density of the residuals shows that the data does not follow a normal distribution and is right skewed. 
 
 ```{r}
 check_model(m1_ols, check = "homogeneity")
 ```
-
+This plot demonstrates the "Homogeneity of Variance", which is a plot of fitted values with residuals. Since the data behaves non-normally, there is not a linear relationship between the fitted values and residuals and instead, the data curves. 
 
 ```{r}
 check_model(m1_ols, check = "pp_check")
 ```
+This final plot shows that the OLS regression model underpredicts the data. The data is demonstrating stronger variance than expected for this model. 
 
 ------------------------------------------------------------------------
 
@@ -238,42 +341,63 @@ check_model(m1_ols, check = "pp_check")
 
 **a.** Estimate a Poisson regression model using the `glm()` function
 
-**b.** Interpret the predictor coefficient in your own words. Use full sentences and write your interpretation of the results to be as clear as possible to a non-academic audience.
-
-**c.** Explain the statistical concept of dispersion and overdispersion in the context of this model. 
-
-**d.** Compare results with previous model, explain change in the significance of the treatment effect
-
 ```{r}
 #HINT1: Incidence Ratio Rate (IRR): Exponentiation of beta returns coefficient which is interpreted as the 'percent change' for a one unit increase in the predictor 
 
 #HINT2: For the second glm() argument `family` use the following specification option `family = poisson(link = "log")`
 
-m2_pois <- 
+m2_pois <- glm(counts ~ treat, 
+               family = poisson(link = "log"), 
+               data = spiny_counts)
+
+summ(m2_pois, model.fit = FALSE) 
+
+#....Extract Coefficients....
+intercept_m2_pois <- m2_pois$coefficients[1]
+treat_m2_pois <- m2_pois$coefficients[2]
+
+#....Interpret Coefficients...
+iir_int_m2_pois <- exp(intercept_m2_pois)
+iir_treat_m2_pois <- (exp(treat_m2_pois)-1)*100 
+
+#....Add to table....
 
 ```
+**b.** Interpret the predictor coefficient in your own words. Use full sentences and write your interpretation of the results to be as clear as possible to a non-academic audience.
+
+A Poisson model is used to determine the relationship between predictor and response when the response are count values. For this model, we are assessing the relationship between treatment or if the site is an MPA or not an MPA and the number of lobster in the site. The predictor coefficient for this model means that on average, MPA sites have 53.7% more lobsters than non-MPA sites. 
+
+**c.** Explain the statistical concept of dispersion and overdispersion in the context of this model. 
+
+A key assumption with Poisson models is that the variance of the data is equal the mean of the data. This is the dispersion of the data. In terms of this model, a normally dispersed data would point to 10 lobsters with 10 variance, however this data is overdispersed. Overdispersion is when the data's variance is greater than the mean. For lobster count data, this can be because certain sites might have more lobster counts, as you can see in `Fig 1.`. 
+
+**d.** Compare results with previous model, explain change in the significance of the treatment effect. 
+
+Compared to `m1_ols`, the standard errors for `m2_pois` show that this model fits the coefficients with more certainty. 
 
 **e.** Check the model assumptions. Explain results.
-
-**f.** Conduct tests for over-dispersion & zero-inflation. Explain results.
 
 ```{r}
 check_model(m2_pois)
 ```
-
+**f.** Conduct tests for over-dispersion & zero-inflation. Explain results.
 ```{r}
 check_overdispersion(m2_pois)
 ```
+This overdispersion test shows that the dispersion ratio is 20.176. This is a ratio of  the observed variance to the expected variance and since it is greater than 1 (perfect dispersion), this signifies overdispersion within the data. 
 
 ```{r}
 check_zeroinflation(m2_pois)
+```
+A good practice for determining models is to check if zero values are inflating the statistical analysis for the data. For count data, it is expected that zero values are going to be prevalent, however for this data there are no observed zeros. This can be confired with the following code:
+```{r}
+range(spiny_counts$counts)
 ```
 
 **g.** Fit a negative binomial model using the function glm.nb() from the package `MASS` and check model diagnostics 
 
 **h.** In 1-2 sentences explain rationale for fitting this GLM model.
 
-**i.** Interpret the treatment estimate result in your own words. Compare with results from the previous model.
 
 ```{r}
 library(MASS) ## NOTE: The `select()` function is masked. Use: `dplyr::select()` ##
@@ -283,9 +407,12 @@ library(MASS) ## NOTE: The `select()` function is masked. Use: `dplyr::select()`
 
 # NOTE: The `glm.nb()` function does not require a `family` argument
 
-m3_nb <- 
+m3_nb <- glm.nb(counts ~ treat, data = spiny_counts)
+    
+summ(m3_nb, model.fit = FALSE) 
 
 ```
+**i.** Interpret the treatment estimate result in your own words. Compare with results from the previous model.
 
 
 ```{r}
