@@ -1,20 +1,20 @@
 ---
-title: "Assignment 1"
-subtitle: "California Spiny Lobster (*Panulirus Interruptus*): Assessing the Impact of Marine Protected Areas (MPAs) at 5 Reef Sites in Santa Barbara County" 
-author: "EDS 241 / ESM 244 (**Due: 1/20**)"
+title: "Assignment 1 - Resubmission"
+author: 'EDS 241 / ESM 244 (**Due: 1/20**)'
 date: "1/8/26"
-output: 
-    html_document:
-      theme: flatly
+output:
+  html_document:
+    theme: flatly
+  pdf_document: default
+subtitle: 'California Spiny Lobster (*Panulirus Interruptus*): Assessing the Impact
+  of Marine Protected Areas (MPAs) at 5 Reef Sites in Santa Barbara County'
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(eval=FALSE, warning = FALSE, message = FALSE )
+knitr::opts_chunk$set(eval=TRUE, warning = FALSE, message = FALSE )
 ```
 
 ------------------------------------------------------------------------
-
-![](figures/spiny2.jpg)
 
 ------------------------------------------------------------------------
 
@@ -63,13 +63,13 @@ library(MASS)
 
 ### **Introduction**
 
-You're about to dive into some deep data collected from five reef sites in Santa Barbara County, all about the abundance of California spiny lobsters! 🦞 Data was gathered by divers annually from 2012 to 2018 across Naples, Mohawk, Isla Vista, Carpinteria, and Arroyo Quemado reefs.
+You're about to dive into some deep data collected from five reef sites in Santa Barbara County, all about the abundance of California spiny lobsters! Data was gathered by divers annually from 2012 to 2018 across Naples, Mohawk, Isla Vista, Carpinteria, and Arroyo Quemado reefs.
 
 Why lobsters? Well, this sample provides an opportunity to evaluate the impact of Marine Protected Areas (MPAs) established on January 1, 2012 (Reed, 2019). Of these five reefs, Naples, and Isla Vista are MPAs, while the other three are not protected (non-MPAs). Comparing lobster health between these protected and non-protected areas gives us the chance to study how commercial and recreational fishing might impact these ecosystems.
 
 We will consider the MPA sites the `treatment` group and use regression methods to explore whether protecting these reefs really makes a difference compared to non-MPA sites (our control group). In this assignment, we’ll think deeply about which causal inference assumptions hold up under the research design and identify where they fall short. 
 
-Let’s break it down step by step and see what the data reveals! 📊
+Let’s break it down step by step and see what the data reveals! 
 
 ![](figures/map-5reefs.png)
 
@@ -80,7 +80,8 @@ Let’s break it down step by step and see what the data reveals! 📊
 
 **a.** Do the control sites (Arroyo Quemado, Carpenteria, and Mohawk) provide a strong counterfactual for our treatment sites (Naples, Isla Vista)? Write a paragraph making a case for why this comparison is ceteris paribus or whether selection bias is likely (be specific!).  
 
-Finding a perfect counterfactual is a difficult task to do. In this study, there are three control sites and two treatment sites. The size and lobster populations of all the sites is a feature that is difficult to control for. Although there is a control and treatment group assigned randomly, ommitted variable bias still appears within this sample design, therefore selection bias is likely because the control and treatment could be more similar. 
+In this study, there are three control sites and two treatment sites that were assigned *not* at random, and based on location. This introduces selection bias because MPA sites are often placed in regions with historical lobster populations, better habitat, accessibility, etc. In addition, the size and lobster populations of all the sites is a feature that is difficult to control for. 
+
 
 ------------------------------------------------------------------------
 
@@ -113,6 +114,7 @@ tidydata <- rawdata %>%
                        # Specify new levels 
                        labels = c("Arroyo Quemado", "Carpenteria", "Mohawk", "Isla Vista", "Naples")))
 
+#levels(tidydata$reef) 
     
 ```
 
@@ -136,9 +138,8 @@ spiny_counts <- tidydata %>%
     # Group by site, year, and transect
     group_by(site, year, transect) %>% 
     # Count the number of rows in each group
-    mutate(counts = n()) %>% 
-    # Create new column
-    mutate(mean_size = mean(size_mm, na.rm = TRUE)) %>% 
+    summarize(counts = sum(count, na.rm = TRUE),
+    mean_size = mean(size_mm, na.rm = TRUE)) %>% 
     # ungroup 
     ungroup() %>% 
 # ...... Step e.....
@@ -227,7 +228,7 @@ plot_3 <- tidydata %>%
   ggplot(aes(x = count, y = year, fill = year)) +
   ggridges::geom_density_ridges(rel_min_height = 0.01, scale = 2) +
   scale_fill_brewer(palette = "PuBu") +
-  coord_cartesian(xlim = c(0, 20)) +
+  coord_cartesian(xlim = c(0, 7.5)) +
   labs(x = "Lobster count", y = "Year", title = "Spiny Lobster Count Distribution by Year") +
   theme_bw() +
     theme(plot.title = element_text(hjust = 0.5), legend.position = "none")
@@ -240,7 +241,7 @@ plot_3
 ```{r}
 # ....plot 4: Lobster size....
 
-plot_4 <- spiny_counts %>%
+plot_4 <- tidydata %>%
   ggplot(aes(x = site, y = size_mm, color = site)) +
   geom_beeswarm(
     size = 2,
@@ -267,14 +268,14 @@ treatment_sum <- spiny_counts %>%
     # Group by mpa
     tbl_summary(by = treat, # same as treatment 
                 # Include mean of outcome (count, size)
-                include = c(count, size_mm),
+                include = c(counts, mean_size),
                 # Stat = mean 
                 statistic = list(all_continuous()~ "{mean}"), 
                 # Remove unknowns 
                 missing = "no", 
                 label = list(
-      count   ~ "Lobster count",
-      size_mm ~ "Carapace length (mm)"
+      counts   ~ "Lobster count",
+      mean_size ~ "Mean Carapace length (mm)"
     )) %>% 
     bold_labels()
 
@@ -311,7 +312,7 @@ summ(m1_ols, model.fit = FALSE)
 
 ```
 Interpretation:
-The average lobster count for non-MPA sites is 28.17. For treated or MPA sites, lobster count is on average 15.20 more lobsters than non-MPA sites.   
+With confidence (p < 0.05), the average lobster count for non-MPA sites is 22.73. For treated or MPA sites, lobster count is on average 5 more lobsters than non-MPA sites, however this is not statistically significant. 
 
 **c.** Check the model assumptions using the `check_model` function from the `performance` package
 
@@ -376,7 +377,7 @@ coef_table
 ```
 **b.** Interpret the predictor coefficient in your own words. Use full sentences and write your interpretation of the results to be as clear as possible to a non-academic audience.
 
-A Poisson model is used to determine the relationship between predictor and response when the response are count values. For this model, we are assessing the relationship between treatment or if the site is an MPA or not an MPA, and the number of lobsters in the site. The predictor coefficient for this model means that on average, MPA sites have 53.7% more lobsters than non-MPA sites. 
+A Poisson model is used to determine the relationship between predictor and response when the response are count values. For this model, we are assessing the relationship between treatment or if the site is an MPA or not an MPA, and the number of lobsters in the site. The predictor coefficient for this model means that on average, MPA sites have 23% more lobsters than non-MPA sites. 
 
 **c.** Explain the statistical concept of dispersion and overdispersion in the context of this model. 
 
@@ -397,15 +398,13 @@ This model is assuming that the data's residual variance is similar to its mean.
 ```{r}
 check_overdispersion(m2_pois)
 ```
-This overdispersion test shows that the dispersion ratio is 20.176. This is a ratio of  the observed variance to the expected variance and since it is greater than 1 (perfect dispersion), this signifies overdispersion within the data. 
+This overdispersion test shows that the dispersion ratio is 67.033. This is a ratio of  the observed variance to the expected variance and since it is greater than 1 (perfect dispersion), this signifies overdispersion within the data. 
 
 ```{r}
 check_zeroinflation(m2_pois)
 ```
-A good practice for determining models is to check if zero values are inflating the statistical analysis for the data. For count data, it is expected that zero values are going to be prevalent, however for this data there are no observed zeros. This can be confirmed with the following code:
-```{r}
-range(spiny_counts$counts)
-```
+A good practice for determining models is to check if zero values are inflating the statistical analysis for the data. For count data, it is expected that zero values are going to be prevalent. 
+
 
 **g.** Fit a negative binomial model using the function glm.nb() from the package `MASS` and check model diagnostics 
 
@@ -445,13 +444,13 @@ coef_table2
 ```
 **i.** Interpret the treatment estimate result in your own words. Compare with results from the previous model.
 
-The negative binomial intercept for this model is 28.2. This is the average lobster count in non MPA sites. When referring to the treatment coefficient, on average, MPA sites have 53.7% more lobsters than non-MPA sites. This is consistent with the coefficient for `m2_pois`. 
+The negative binomial intercept for this model is 3.12. This is the average lobster count in non MPA sites. When referring to the treatment coefficient, on average, MPA sites have 23% more lobsters than non-MPA sites. This is consistent with the coefficient for `m2_pois`. 
 
 
 ```{r}
 check_overdispersion(m3_nb)
 ```
-The dispersion ratio for this model is almost 1, signfiying that the data's dispersion is correctly accounted for with a negativw binomial GLM. 
+The dispersion ratio for this model is around 1, signifying that the data's dispersion is correctly accounted for with a negative binomial GLM. 
 
 ```{r}
 check_zeroinflation(m3_nb)
@@ -474,7 +473,7 @@ check_model(m3_nb)
 
 **c.** Write a short paragraph comparing the results. Is the treatment effect `robust` or stable across the model specifications. 
 
-As we advanced our model type, the effect of treatment was able to be predicted with more certainty. The OLS model was the least robust in determining the treatment effect, and there is not much of a difference in the treatment effect coefficient between Poisson and the negative binomial model. In other words, the treatment effect stabilized between the final two models. 
+As we advanced our model type, the effect of treatment was able to be predicted with more certainty. The OLS model was the least robust in determining the treatment effect, and there is not much of a difference in the treatment effect coefficient between Poisson and the negative binomial model. In other words, the treatment effect stabilized between the final two models. All three models showed significant results for at least one coefficient, signfiying that they were able to show a relationship between lobster abundance and treatment. 
 
 ```{r}
 
@@ -575,7 +574,12 @@ d. Discuss the following causal inference assumptions in the context of the MPA 
     1) SUTVA: Stable Unit Treatment Value assumption 
     2) Excludability assumption
     
-For this particular study, a site’s existence as an MPA or not implies inference into the spatial connectedness of the research design. According to the theory of “spillover effects,” a site that is managed as an MPA can lead to a boost in lobster abundance, however it can also impact surrounding non-MPA regions, reducing the effect of treatment on the study. When considering the nature of these MPAs, it is difficult to apply the Stable Unit Treatment Value Assumption because some sites have different characteristics, terrains, suitable habitat for lobsters, and initial lobster abundances. When it comes to the excludability assumption, this study does little to control for how the proximity of non-MPA sites to MPA sites might lead to a boost in lobster abundance unintentionally, leading to a diffusion of the causal inference of the study.
+For this particular study, a site’s existence as an MPA or not implies inference into the spatial connectedness of the research design. According to the theory of “spillover effects,” a site that is managed as an MPA can lead to a boost in lobster abundance, however it can also impact surrounding non-MPA regions, reducing the effect of treatment on the study. Therefore, spillover effects are likely because the effect of the treatment influences the control. The existence of spillover effects in this study dulls the effect of the treatment, making it difficult to see the ultimate effect. 
+
+When considering the nature of these MPAs, it is difficult to apply the Stable Unit Treatment Value Assumption because some sites have different characteristics, terrains, suitable habitat for lobsters, and initial lobster abundances. When considering the hidden variation, some lobsters may travel between sites, experiencing the treatment and controls. 
+
+Because this study was not experimental and MPA sites were not chosen at random, exogeneity bias is present in this study. 
+
 
 
 ------------------------------------------------------------------------
